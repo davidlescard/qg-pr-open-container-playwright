@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Enables POST /api/test/reset; never set this in a deployed environment.
+      ENABLE_TEST_RESET: "true"
+    volumes:
+      - app-data:/data
+
+volumes:
+  app-data:

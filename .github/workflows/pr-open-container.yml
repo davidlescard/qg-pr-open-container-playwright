@@ -1,0 +1,61 @@
+name: PR Open - Container
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-open-container-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-container:
+    name: e2e-container
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # The pnpm version comes from "packageManager" in the root package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Build image and start the container
+        run: ./build.sh container-up
+
+      - name: Install E2E dependencies
+        run: pnpm install --frozen-lockfile --filter ai-ci-reference-e2e
+
+      - name: Install Chromium
+        run: pnpm --filter ai-ci-reference-e2e exec playwright install --with-deps chromium
+
+      - name: Playwright smoke suite against the container
+        run: pnpm --filter ai-ci-reference-e2e test:smoke
+        env:
+          CI: "true"
+          BASE_URL: http://localhost:3000
+
+      - name: Upload Playwright diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-diagnostics
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Container logs
+        if: ${{ !cancelled() }}
+        run: docker logs qg-container
+
+      - name: Remove container
+        if: ${{ always() }}
+        run: ./build.sh container-down
